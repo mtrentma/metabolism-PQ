@@ -1,6 +1,14 @@
 library(lubridate)
 library(data.table)
 library(plyr)
+library(dplyr)
+library(readr)     
+library(ggplot2)
+library(cowplot)
+library(reshape2)
+library(xts)
+library(dygraphs)
+library(tidyr)
 
 # Read/format chamber SAMI CO2 data ---------------------------------------------
 
@@ -18,8 +26,9 @@ names(sco2.data)<-c("date", "time","temp_sami","CO2.ppmv","battery","date.time",
 #SAMI is measuring temp of the bath. Must adjust to temp in the chamber (from DO)
 o2.data = read.csv("chamber.o2.all.csv",header=T)
 names(o2.data)<-c("date", "time","pres.mmhg","odo.sat","odo.mgl","odo.local","temp.f")
-o2.data$date.time<-as.POSIXct(paste(o2.data$date, o2.data$time),format="%m-%d-%Y %H:%M:%S",tz="UTC")
+o2.data$date.time<-as.POSIXct(paste(o2.data$date, o2.data$time),format="%m-%d-%Y %H:%M:%S",tz="")
 o2.data$temp.c<-(o2.data$temp.f-32)*5/9
+o2.data$odo.uM<-o2.data$odo.mgl*1000/31.99
 
 #New object with average temp per minute (temp with DO is measured every 30 s)
 o2.avg.temp<-NA
@@ -63,7 +72,7 @@ sco2.data$CO2.mol<-co2(sco2.data$o2.temp, sco2.data$CO2.ppmv)
 
 #Load and match alkalinity data
 at.data <- read.csv("chamber.alk.all.csv",header=T)
-at.data.avg <- ddply(at.data, .(date), summarize, 
+at.data.avg <- ddply(at.data, .(Date.collected), summarize, 
                      mean(at.mol.L, na.rm=TRUE))
 names(at.data.avg)<-c("date", "at.mol")
 sco2.data$at.mol<-at.data.avg$at.mol[match(sco2.data$date,at.data.avg$date)]
@@ -96,12 +105,143 @@ Carbfrom_C_A <- function(K1, K2, StmpCO2.mol , A){
 K1<-K1calc(sco2.data$o2.temp)
 K2<-K2calc(sco2.data$o2.temp)
 StmpCO2.mol<-sco2.data$CO2.mol #in mol/L
-A<-sco2.data$at.mol #in mol/L
+A<-sco2.data$at.mol*2#in mol/L
 carb<-Carbfrom_C_A(K1, K2, StmpCO2.mol , A)
 sco2.data$DIC.uM<-carb$D*1000*1000
 
 
 
+# QAQC data and calculate slopes by treatment -----------------------------
 
+# DIC ---------------------------------------------------------------------
+
+
+setwd("C:/Users/matt/IDrive-Sync/Postdoc/Chamber metabolism/Chambers2021")
+meta<-read.csv("chamber.notes.all.csv",header=T)
+meta$start.date.time<-as.POSIXct(paste(meta$date, meta$start.time),format="%m-%d-%Y %H:%M:%S",tz="")
+meta$end.date.time<-as.POSIXct(paste(meta$date, meta$end.time),format="%m-%d-%Y %H:%M:%S",tz="")
+##############
+## SUBSET
+#############
+## Subset the main data file based on incubation time and experiment
+
+subdat<-list()
+
+for(i in 1:length(meta$level)){
+  
+  subdat[[i]]<-subset(sco2.data, date.time>meta$start.date.time[i]  & date.time< meta$end.date.time[i])
+  subdat[[i]]$samplenum <-i
+  
+}
+subdat <- bind_rows(subdat)
+
+sco2.timediff<-NA
+for (i in 1:length(meta$level)){
+sco2.timediff[i]<-as.double(difftime(meta$end.date.time[i], meta$start.date.time[i], units="min"))
+}
+
+subdat$time.since<-NA
+for(i in 1:length(meta$level)){
+time.sin<-as.numeric(seq(from=0, to=round(sco2.timediff[i]),by=5)) 
+subdat[subdat$samplenum==i,]$time.since<-time.sin[1:length(subdat[subdat$samplenum==i,]$date)]
+}
+
+######################
+## QA/QC every sample
+######################
+## Look at time series traces plotted over original data
+## and decide on new Reset time if necessary
+
+
+ggplot(subdat, aes(time.since, DIC.uM))+
+  geom_point()+
+  geom_smooth(method='lm', formula= y~x)+
+  facet_wrap(~samplenum, ncol=2, scales = "free")
+
+##Calculate the slope
+slope<-
+  subdat %>% 
+  group_by(samplenum) %>% 
+  do({
+    mod = lm(DIC.uM~ time.since , data = .)
+    data.frame(DIC.uM.slope = coef(mod)[2])
+  })
+
+
+meta.final<- full_join(meta,slope)
+
+
+
+# DO ----------------------------------------------------------------------
+
+##############
+## SUBSET
+#############
+## Subset the main data file based on incubation time and experiment
+
+subdat<-list()
+
+for(i in 1:length(meta$level)){
+  
+  subdat[[i]]<-subset(o2.data, date.time>meta$start.date.time[i] & o2.data$date.time< meta$end.date.time[i])
+  subdat[[i]]$samplenum <-i
+  
+}
+subdat <- bind_rows(subdat)
+
+o2.timediff<-NA
+for (i in 1:length(meta$level)){
+  o2.timediff[i]<-as.double(difftime(meta$end.date.time[i], meta$start.date.time[i], units="min"))
+}
+
+subdat$time.since<-NA
+for(i in 1:length(meta$level)){
+  time.sin<-as.numeric(seq(from=0, to=round(o2.timediff[i]),by=0.5)) 
+  subdat[subdat$samplenum==i,]$time.since<-time.sin[1:length(subdat[subdat$samplenum==i,]$date)]
+}
+
+######################
+## QA/QC every sample
+######################
+## Look at time series traces plotted over original data
+## and decide on new Reset time if necessary
+
+
+ggplot(subdat, aes(time.since, odo.uM))+
+  geom_point()+
+  geom_smooth(method='lm', formula= y~x)+
+  facet_wrap(~samplenum, ncol=2)
+
+##Calculate the slope
+slope<-
+  subdat %>% 
+  group_by(samplenum) %>% 
+  do({
+    mod = lm(odo.uM~ time.since , data = .)
+    data.frame(odo.uM.slope = coef(mod)[2])
+  })
+
+
+meta.final<- full_join(meta.final,slope)
+
+meta.final$DIC.uM.slope/meta.final$odo.uM.slope
+
+#Substract ER from NEP to make GPP
+meta.final$level<-as.factor(meta.final$level)
+for (i in 1:levels(meta.final$level))
+
+PQ.DIC<-NA
+PQ.DIC[1]<-meta.final$DIC.uM.slope[1]+meta.final$DIC.uM.slope[2]
+PQ.DIC[2]<-meta.final$DIC.uM.slope[3]+meta.final$DIC.uM.slope[4]
+PQ.DIC[3]<-meta.final$DIC.uM.slope[5]+meta.final$DIC.uM.slope[6]
+
+PQ.DO<-NA
+PQ.DO[1]<-meta.final$odo.uM.slope[1]+meta.final$odo.uM.slope[2]
+PQ.DO[2]<-meta.final$odo.uM.slope[3]+meta.final$odo.uM.slope[4]
+PQ.DO[3]<-meta.final$odo.uM.slope[5]+meta.final$odo.uM.slope[6]
+
+PQ<-PQ.DIC/PQ.DO
+
+abs(PQ)
 
 write.csv(sco2.data,"Chamber_test_run_SAMI_DIC_08.18.2020.csv",row.names = FALSE)
