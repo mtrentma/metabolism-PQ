@@ -209,15 +209,15 @@ ggplot(sum_file_melt, aes(DATETIME, value, color=samplenum))+
 
 ##### SOLUBILITY CONSTANT FOR CO2 (KH) #####
 # Use Henry's Law and parameters from Weiss 1974 to calculate KH in units of mol L-1 atm-1 as a function of temperature (also in Demarty et al 2011; many others)
-KH.CO2 <- function(temp_equil){
-  tempK <- temp_equil + 273.15
+KH.CO2 <- function(temp_samp){
+  tempK <- temp_samp + 273.15
   KH.CO2 <- exp( -58.0931 + (90.5069*(100/tempK)) +22.2940*log((tempK/100), base=exp(1)) )
   KH.CO2
 }
 
 #####ppmv to mol/L
-co2 <- function(temp_samp,CO2_post ){
-  KH.samp <- KH.CO2(temp_samp)
+co2 <- function(temp_equil,CO2_post ){
+  KH.samp <- KH.CO2(temp_equil)
   co2.mol.L<-  KH.samp*CO2_post/1000000
 }
 
@@ -269,8 +269,8 @@ DIC_corr<-Carb1$D+delta_DIC
 
 Carbfrom_D_A <- function(K1, K2, DIC_corr, A){
   a <- A
-  b <- K1*(A-DIC_corr)
-  c <- (A-(2*DIC_corr))*K1*K2
+  b <- K1*(a-DIC_corr)
+  c <- (a-(2*DIC_corr))*K1*K2
   H_t <- ((-1*b)+sqrt((b^2)-(4*a*c)))/(2*a)
   
   pH_t <- -1*log10(H_t)
@@ -292,7 +292,7 @@ Carbfrom_D_A <- function(K1, K2, DIC_corr, A){
 R= 0.08205601 # gas constant in L*atm/mol*K
 dens=0.9998395 # density of freshwater
 
-#Input variables
+#Prepare input variables
 Syringe=sum_file$Syringe
 temp_equil=sum_file$temp_equil        # temperature of water immediately after equilibriaum in C
 temp_samp=sum_file$temp_samp        # temperature of water at the time of sampling in C
