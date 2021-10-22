@@ -111,6 +111,7 @@ sco2.data$DIC.uM<-carb$D*1000*1000
 
 
 
+
 # QAQC data and calculate slopes by treatment -----------------------------
 
 # DIC ---------------------------------------------------------------------
@@ -120,7 +121,8 @@ setwd("C:/Users/matt/IDrive-Sync/Postdoc/Chamber metabolism/Chambers2021")
 meta<-read.csv("chamber.notes.all.csv",header=T)
 meta$start.date.time<-as.POSIXct(paste(meta$date, meta$start.time),format="%m-%d-%Y %H:%M:%S",tz="")
 meta$end.date.time<-as.POSIXct(paste(meta$date, meta$end.time),format="%m-%d-%Y %H:%M:%S",tz="")
-meta$end.date.time[7:36]<-meta$end.date.time[7:36]+(60*6)
+meta$end.date.time<-meta$end.date.time+(60*6)
+meta$start.date.time<-meta$start.date.time-(60*6)
 
 ## SUBSET
 ## Subset the main data file based on incubation time and experiment
@@ -154,11 +156,22 @@ subdat.DIC[subdat.DIC$samplenum==i,]$time.since<-time.sin[1:length(subdat.DIC[su
 ## Look at time series traces plotted over original data
 ## and decide on new Reset time if necessary
 
-
-ggplot(subdat.DIC, aes(time.since, DIC.uM))+
+sub<-subset(subdat.DIC, samplenum==1|samplenum==2 |samplenum==3|samplenum==4|samplenum==5|samplenum==6)
+ggplot(subdat.DIC, aes(time.since, CO2.ppmv))+
   geom_point()+
   geom_smooth(method='lm', formula= y~x)+
   facet_wrap(~samplenum, ncol=4, scales = "free")
+
+subdat.DIC %>% 
+  filter(treatment=='vel', level==1) %>% 
+  ggplot(aes(time.since, DIC.uM)) %.>%
+  geom_point() %.>%
+  geom_smooth(method='lm', formula= y~x) %.>%
+  facet_wrap(metab~date,  scales = "free")
+
+
+
+
 
 ##Remove obviously bad data points
 subdat.DIC$DIC.uM[c(45,50,59,60,76,85,92,93,98,111,133:135,156,160,163,250,259)]<-NA
@@ -169,8 +182,12 @@ ggplot(subdat.DIC, aes(time.since, DIC.uM))+
   geom_smooth(method='lm', formula= y~x)+
   facet_wrap(~samplenum, ncol=4, scales = "free")
 
+##Add metadata
+subdat.DIC<- full_join(meta,subdat.DIC)
+
+
 ##Calculate the slope for each experiment
-slope<-
+slope.DIC<-
   subdat.DIC %>% 
   group_by(samplenum) %>% 
   do({
@@ -178,9 +195,19 @@ slope<-
     data.frame(DIC.uM.slope = coef(mod)[2])
   })
 
-##Join slopes to final data object
-meta.final<- full_join(meta,slope)
+##Calculate the slope for each experiment
+slope.CO2<-
+  subdat.DIC %>% 
+  group_by(samplenum) %>% 
+  do({
+    mod = lm(CO2.ppmv~ time.since , data = .)
+    data.frame(CO2.ppmv.slope = coef(mod)[2])
+  })
 
+
+##Join slopes to final data object
+meta.final<- full_join(meta,slope.DIC)
+meta.final<- full_join(meta.final,slope.CO2)
 
 
 # DO ----------------------------------------------------------------------
@@ -234,6 +261,9 @@ ggplot(subdat.DO, aes(time.since, odo.uM))+
   geom_smooth(method='lm', formula= y~x)+
   facet_wrap(~samplenum, ncol=4,scales='free')
 
+##Add metadata
+subdat.DO<- full_join(meta,subdat.DO)
+
 ##Calculate the slope for each experiment
 slope<-
   subdat.DO %>% 
@@ -248,66 +278,107 @@ meta.final<- full_join(meta.final,slope)
 
 #meta.final$DIC.uM.slope[3]<-0.15##average of other two dark delta DIC
 
-#Substract ER from NEP to make GPP
-meta.final$level<-as.factor(meta.final$level)
-#for (i in 1:levels(meta.final$level))
+
 
 
 # Calculate PQ ------------------------------------------------------------
 
 
 PQ.DIC<-NA
+#Add ER with NEP to make GPP
+PQ.DIC[1]<-meta.final$DIC.uM.slope[2]-meta.final$DIC.uM.slope[1]
+PQ.DIC[2]<-meta.final$DIC.uM.slope[4]-meta.final$DIC.uM.slope[3]
+PQ.DIC[3]<-meta.final$DIC.uM.slope[6]-meta.final$DIC.uM.slope[5]
+PQ.DIC[4]<-meta.final$DIC.uM.slope[8]-meta.final$DIC.uM.slope[7]
+PQ.DIC[5]<-meta.final$DIC.uM.slope[10]-meta.final$DIC.uM.slope[9]#bad
+PQ.DIC[6]<-meta.final$DIC.uM.slope[12]-meta.final$DIC.uM.slope[11]#bad
+PQ.DIC[7]<-meta.final$DIC.uM.slope[14]-meta.final$DIC.uM.slope[13]#bad
+PQ.DIC[8]<-meta.final$DIC.uM.slope[16]-meta.final$DIC.uM.slope[15]#bad
+PQ.DIC[9]<-meta.final$DIC.uM.slope[18]-meta.final$DIC.uM.slope[17]
+PQ.DIC[10]<-meta.final$DIC.uM.slope[20]-meta.final$DIC.uM.slope[19]
+PQ.DIC[11]<-meta.final$DIC.uM.slope[22]-meta.final$DIC.uM.slope[21]
+PQ.DIC[12]<-meta.final$DIC.uM.slope[24]-meta.final$DIC.uM.slope[23]
+PQ.DIC[13]<-meta.final$DIC.uM.slope[26]-meta.final$DIC.uM.slope[25]
+PQ.DIC[14]<-meta.final$DIC.uM.slope[28]-meta.final$DIC.uM.slope[27]#bad
+PQ.DIC[15]<-meta.final$DIC.uM.slope[30]-meta.final$DIC.uM.slope[29]#bad
+PQ.DIC[16]<-meta.final$DIC.uM.slope[32]-meta.final$DIC.uM.slope[31]
+PQ.DIC[17]<-meta.final$DIC.uM.slope[34]-meta.final$DIC.uM.slope[33]#bad
+PQ.DIC[18]<-meta.final$DIC.uM.slope[36]-meta.final$DIC.uM.slope[35]#bad
 
-PQ.DIC[1]<-meta.final$DIC.uM.slope[1]+meta.final$DIC.uM.slope[2]
-PQ.DIC[2]<-meta.final$DIC.uM.slope[3]+meta.final$DIC.uM.slope[4]
-PQ.DIC[3]<-meta.final$DIC.uM.slope[5]+meta.final$DIC.uM.slope[6]
-PQ.DIC[4]<-meta.final$DIC.uM.slope[7]+meta.final$DIC.uM.slope[8]
-PQ.DIC[5]<-meta.final$DIC.uM.slope[9]+meta.final$DIC.uM.slope[10]#bad
-PQ.DIC[6]<-meta.final$DIC.uM.slope[11]+meta.final$DIC.uM.slope[12]#bad
-PQ.DIC[7]<-meta.final$DIC.uM.slope[13]+meta.final$DIC.uM.slope[14]#bad
-PQ.DIC[8]<-meta.final$DIC.uM.slope[15]+meta.final$DIC.uM.slope[16]#bad
-PQ.DIC[9]<-meta.final$DIC.uM.slope[17]+meta.final$DIC.uM.slope[18]
-PQ.DIC[10]<-meta.final$DIC.uM.slope[19]+meta.final$DIC.uM.slope[20]
-PQ.DIC[11]<-meta.final$DIC.uM.slope[21]+meta.final$DIC.uM.slope[22]
-PQ.DIC[12]<-meta.final$DIC.uM.slope[23]+meta.final$DIC.uM.slope[24]
-PQ.DIC[13]<-meta.final$DIC.uM.slope[25]+meta.final$DIC.uM.slope[26]
-PQ.DIC[14]<-meta.final$DIC.uM.slope[27]+meta.final$DIC.uM.slope[28]#bad
-PQ.DIC[15]<-meta.final$DIC.uM.slope[29]+meta.final$DIC.uM.slope[30]#bad
-PQ.DIC[16]<-meta.final$DIC.uM.slope[31]+meta.final$DIC.uM.slope[32]
-PQ.DIC[17]<-meta.final$DIC.uM.slope[33]+meta.final$DIC.uM.slope[34]#bad
-PQ.DIC[18]<-meta.final$DIC.uM.slope[35]+meta.final$DIC.uM.slope[36]#bad
+
+PQ.CO2<-NA
+#Add ER with NEP to make GPP
+PQ.CO2[1]<-meta.final$CO2.ppmv.slope[2]-meta.final$CO2.ppmv.slope[1]
+PQ.CO2[2]<-meta.final$CO2.ppmv.slope[4]-meta.final$CO2.ppmv.slope[3]
+PQ.CO2[3]<-meta.final$CO2.ppmv.slope[6]-meta.final$CO2.ppmv.slope[5]
+PQ.CO2[4]<-meta.final$CO2.ppmv.slope[8]-meta.final$CO2.ppmv.slope[7]
+PQ.CO2[5]<-meta.final$CO2.ppmv.slope[10]-meta.final$CO2.ppmv.slope[9]#bad
+PQ.CO2[6]<-meta.final$CO2.ppmv.slope[12]-meta.final$CO2.ppmv.slope[11]#bad
+PQ.CO2[7]<-meta.final$CO2.ppmv.slope[14]-meta.final$CO2.ppmv.slope[13]#bad
+PQ.CO2[8]<-meta.final$CO2.ppmv.slope[16]-meta.final$CO2.ppmv.slope[15]#bad
+PQ.CO2[9]<-meta.final$CO2.ppmv.slope[18]-meta.final$CO2.ppmv.slope[17]
+PQ.CO2[10]<-meta.final$CO2.ppmv.slope[20]-meta.final$CO2.ppmv.slope[19]
+PQ.CO2[11]<-meta.final$CO2.ppmv.slope[22]-meta.final$CO2.ppmv.slope[21]
+PQ.CO2[12]<-meta.final$CO2.ppmv.slope[24]-meta.final$CO2.ppmv.slope[23]
+PQ.CO2[13]<-meta.final$CO2.ppmv.slope[26]-meta.final$CO2.ppmv.slope[25]
+PQ.CO2[14]<-meta.final$CO2.ppmv.slope[28]-meta.final$CO2.ppmv.slope[27]#bad
+PQ.CO2[15]<-meta.final$CO2.ppmv.slope[30]-meta.final$CO2.ppmv.slope[29]#bad
+PQ.CO2[16]<-meta.final$CO2.ppmv.slope[32]-meta.final$CO2.ppmv.slope[31]
+PQ.CO2[17]<-meta.final$CO2.ppmv.slope[34]-meta.final$CO2.ppmv.slope[33]#bad
+PQ.CO2[18]<-meta.final$CO2.ppmv.slope[36]-meta.final$CO2.ppmv.slope[35]#bad
+
 
 PQ.DO<-NA
 
-PQ.DO[1]<-meta.final$odo.uM.slope[1]+meta.final$odo.uM.slope[2]
-PQ.DO[2]<-meta.final$odo.uM.slope[3]+meta.final$odo.uM.slope[4]
-PQ.DO[3]<-meta.final$odo.uM.slope[5]+meta.final$odo.uM.slope[6]
-PQ.DO[4]<-meta.final$odo.uM.slope[7]+meta.final$odo.uM.slope[8]
-PQ.DO[5]<-meta.final$odo.uM.slope[9]+meta.final$odo.uM.slope[10]#bad DIC
-PQ.DO[6]<-meta.final$odo.uM.slope[11]+meta.final$odo.uM.slope[12]#bad DIC
-PQ.DO[7]<-meta.final$odo.uM.slope[13]+meta.final$odo.uM.slope[14]#bad DIC
-PQ.DO[8]<-meta.final$odo.uM.slope[15]+meta.final$odo.uM.slope[16]#bad DIC
-PQ.DO[9]<-meta.final$odo.uM.slope[17]+meta.final$odo.uM.slope[18]
-PQ.DO[10]<-meta.final$odo.uM.slope[19]+meta.final$odo.uM.slope[20]
-PQ.DO[11]<-meta.final$odo.uM.slope[21]+meta.final$odo.uM.slope[22]
-PQ.DO[12]<-meta.final$odo.uM.slope[23]+meta.final$odo.uM.slope[24]
-PQ.DO[13]<-meta.final$odo.uM.slope[25]+meta.final$odo.uM.slope[26]#bad O2
-PQ.DO[14]<-meta.final$odo.uM.slope[27]+meta.final$odo.uM.slope[28]#bad DIC
-PQ.DO[15]<-meta.final$odo.uM.slope[29]+meta.final$odo.uM.slope[30]#bad DIC
-PQ.DO[16]<-meta.final$odo.uM.slope[31]+meta.final$odo.uM.slope[32]
-PQ.DO[17]<-meta.final$odo.uM.slope[33]+meta.final$odo.uM.slope[34]#bad DIC
-PQ.DO[18]<-meta.final$odo.uM.slope[35]+meta.final$odo.uM.slope[36]#bad DIC
-PQ<-PQ.DIC/PQ.DO
-
-PQ[c(5,6,7,8,13,14,15,17,18)]<-NA
+PQ.DO[1]<-meta.final$odo.uM.slope[2]-meta.final$odo.uM.slope[1]
+PQ.DO[2]<-meta.final$odo.uM.slope[4]-meta.final$odo.uM.slope[3]
+PQ.DO[3]<-meta.final$odo.uM.slope[6]-meta.final$odo.uM.slope[5]
+PQ.DO[4]<-meta.final$odo.uM.slope[8]-meta.final$odo.uM.slope[7]
+PQ.DO[5]<-meta.final$odo.uM.slope[10]-meta.final$odo.uM.slope[9]#bad DIC
+PQ.DO[6]<-meta.final$odo.uM.slope[12]-meta.final$odo.uM.slope[11]#bad DIC
+PQ.DO[7]<-meta.final$odo.uM.slope[14]-meta.final$odo.uM.slope[13]#bad DIC
+PQ.DO[8]<-meta.final$odo.uM.slope[16]-meta.final$odo.uM.slope[15]#bad DIC
+PQ.DO[9]<-meta.final$odo.uM.slope[18]-meta.final$odo.uM.slope[17]
+PQ.DO[10]<-meta.final$odo.uM.slope[20]-meta.final$odo.uM.slope[19]
+PQ.DO[11]<-meta.final$odo.uM.slope[22]-meta.final$odo.uM.slope[21]
+PQ.DO[12]<-meta.final$odo.uM.slope[24]-meta.final$odo.uM.slope[23]
+PQ.DO[13]<-meta.final$odo.uM.slope[26]-meta.final$odo.uM.slope[25]#bad O2
+PQ.DO[14]<-meta.final$odo.uM.slope[28]-meta.final$odo.uM.slope[27]#bad DIC
+PQ.DO[15]<-meta.final$odo.uM.slope[30]-meta.final$odo.uM.slope[29]#bad DIC
+PQ.DO[16]<-meta.final$odo.uM.slope[32]-meta.final$odo.uM.slope[31]
+PQ.DO[17]<-meta.final$odo.uM.slope[34]-meta.final$odo.uM.slope[33]#bad DIC
+PQ.DO[18]<-meta.final$odo.uM.slope[36]-meta.final$odo.uM.slope[35]#bad DIC
+PQ<-PQ.DO/PQ.DIC
+PQ.C<-PQ.DO/PQ.CO2
+PQ[c(4,5,6,7,8,9,13,14,15,16,17,18)]<-NA
+PQ.C[c(4,5,6,7,8,9,13,14,15,16,17,18)]<-NA
 abs(PQ)
+abs(PQ.C)
 samplenum<-seq(from=2, to=36, by=2)
-abs.PQ<-as.data.frame(cbind(abs(PQ),samplenum))
-
+abs.PQ<-as.data.frame(cbind(abs(PQ),samplenum,PQ.DO, PQ.DIC))
+names(abs.PQ)<-c('PQ','samplenum', 'PQ.DO','PQ.DIC')
 meta.final<- full_join(meta.final,abs.PQ)
 
 
+# Calculate rates ---------------------------------------------------------
 
+volume<-17 #Liters
+area<-0.03 #m^2
+o2.mass<-32
+c.mass<-12
+rate<-NA
+meta.final$GPP.do<-meta.final$PQ.DO*volume/area*60/1000
+rate$ER.do<-subset(meta.final, metab=="dark")$odo.uM.slope*volume/area*60/1000/1000
+
+meta.final$GPP.dic<-meta.final$PQ.DIC*volume/area*60/1000
+rate$ER.dic<-subset(meta.final, metab=="dark")$DIC.uM.slope*volume/area*60/1000/1000
+rate$GPP.do[c(4,5,6,7,8,9,13,14,15,16,17,18)]<-NA
+rate$GPP.dic[c(4,5,6,7,8,9,13,14,15,16,17,18)]<-NA
+rate$ER.do[c(4,5,6,7,8,9,13,14,15,16,17,18)]<-NA
+rate$ER.dic[c(4,5,6,7,8,9,13,14,15,16,17,18)]<-NA
+
+meta.final$GPP.dic[c(8,10,12,14,16,18,26,28,30,32,34,36)]<-NA
+meta.final$GPP.do[c(8,10,12,14,16,18,26,28,30,32,34,36)]<-NA
 
 
 # Calculate ancillary variables ------------------------------------------
@@ -346,6 +417,10 @@ result<-ddply(subdat,.(samplenum), summarize,
 
 ##Join to meta file
 meta.final<- full_join(meta.final,result)
+meta.final$metab<-as.factor(meta.final$metab)
+meta.final$treatment<-as.factor(meta.final$treatment)
+meta.final$level<-as.factor(meta.final$level)
+
 
 ##Plot
 ggplot(meta.final, aes(DIC.uM.slope, light, color=treatment))+
@@ -390,16 +465,214 @@ ggplot(meta.final, aes(DIC.uM.slope, light, color=treatment))+
   facet_grid(~metab)
   
   
+meta.final.good<-subset(meta.final, !is.na(meta.final$PQ))
+  
+  
 ##Summary plot
+  # New facet label names for dose variable
+  metab.labs <- c("Dark", "Light")
+  names(metab.labs ) <- c("dark", "light")
   
+  # New facet label names for supp variable
+  level.prod.labs <- c("High Prod.", "Med Prod.", "Low Prod.")
+  names(level.prod.labs) <- c("1", "2", "3")  
+  
+  # New facet label names for supp variable
+  level.vel.labs <- c("Low Vel.","Med Vel." , "High Vel.")
+  names(level.vel.labs) <- c("1", "2", "3")  
+  
+  
+#velocity
+#DIC
 good.sampnum<-meta.final$samplenum[which(!is.na(PQ))]
-subdat.DIC[subdat.DIC$samplnum %in% good.sampnum,]
-good.DIC<-subset(subdat.DIC,samplenum==c(1,2,3))
-good.DO<-subset()
-  
+good.DIC.vel<-subset(subdat.DIC,samplenum==1|samplenum==2|samplenum==3|samplenum==4|samplenum==5|samplenum==6)
+good.DIC.vel$level<-as.factor(good.DIC.vel$level)
+good.DIC.vel$level<-factor(good.DIC.vel$level,levels=(c("1","2","3")))
+good.DIC.vel$metab<-as.factor(good.DIC.vel$metab)
+
+##Plot
+
+ggplot(good.DIC.vel, aes(time.since, DIC.uM))+
+  geom_point()+
+  geom_smooth(method='lm', formula= y~x)+
+  facet_grid(level~metab, scales='free',
+             labeller = labeller(level=level.vel.labs, metab=metab.labs))+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=16,color="black"))+
+  theme(axis.title.y=element_text(size=16,color="black"))+
+  theme(axis.text.y=element_text(size=16,color="black"))+
+  theme(axis.text.x=element_text(size=16,color="black"))+
+  xlab("Time (mins)")+
+  ylab("DIC (uM)")
+
+#DO
+good.sampnum<-meta.final$samplenum[which(!is.na(PQ))]
+good.DO.vel<-subset(subdat.DO,samplenum==1|samplenum==2|samplenum==3|samplenum==4|samplenum==5|samplenum==6)
+good.DO.vel$level<-as.factor(good.DO.vel$level)
+good.DO.vel$level<-factor(good.DO.vel$level,levels=(c("1","2","3")))
+good.DO.vel$metab<-as.factor(good.DO.vel$metab)
+
+##Plot
+
+ggplot(good.DO.vel, aes(time.since, odo.uM))+
+  geom_point()+
+  geom_smooth(method='lm', formula= y~x)+
+  facet_grid(level~metab, scales='free',
+             labeller = labeller(level=level.vel.labs, metab=metab.labs))+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=16,color="black"))+
+  theme(axis.title.y=element_text(size=16,color="black"))+
+  theme(axis.text.y=element_text(size=16,color="black"))+
+  theme(axis.text.x=element_text(size=16,color="black"))+
+  xlab("Time (mins)")+
+  ylab("DO(uM)")
+
+
+
+
+#productivity
+#DIC
+  good.DIC.prod<-subset(subdat.DIC,samplenum==19|samplenum==20|samplenum==21|samplenum==22|samplenum==23|samplenum==24)
+  good.DIC.prod$level<-as.factor(good.DIC.prod$level)
+  good.DIC.prod$level<-factor(good.DIC.prod$level,levels=(c("3","2","1")))
+  good.DIC.prod$metab<-as.factor(good.DIC.prod$metab)
+
   ##Plot
-  ggplot(meta.final, aes(treatment, V1, color=treatment, shape=level))+
+ 
+  
+  ggplot(good.DIC.prod, aes(time.since, DIC.uM))+
     geom_point()+
-    facet_grid(metab~samplenum)
+    geom_smooth(method='lm', formula= y~x)+
+    facet_grid(level~metab, scales='free',
+               labeller = labeller(level=level.prod.labs, metab=metab.labs))+
+    theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+    theme(axis.title.x=element_text(size=16,color="black"))+
+    theme(axis.title.y=element_text(size=16,color="black"))+
+    theme(axis.text.y=element_text(size=16,color="black"))+
+    theme(axis.text.x=element_text(size=16,color="black"))+
+    xlab("Time (mins)")+
+    ylab("DIC (uM)")
+
+#DO
+  good.DO.prod<-subset(subdat.DO,samplenum==19|samplenum==20|samplenum==21|samplenum==22|samplenum==23|samplenum==24)
+  good.DO.prod$level<-as.factor(good.DO.prod$level)
+  good.DO.prod$level<-factor(good.DO.prod$level,levels=(c("3","2","1")))
+  good.DO.prod$metab<-as.factor(good.DO.prod$metab)
+  ##Plot
+  
+  
+  ggplot(good.DO.prod, aes(time.since, odo.uM))+
+    geom_point()+
+    geom_smooth(method='lm', formula= y~x)+
+    facet_grid(level~metab, scales='free',
+               labeller = labeller(level=level.prod.labs, metab=metab.labs))+
+    theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+    theme(axis.title.x=element_text(size=16,color="black"))+
+    theme(axis.title.y=element_text(size=16,color="black"))+
+    theme(axis.text.y=element_text(size=16,color="black"))+
+    theme(axis.text.x=element_text(size=16,color="black"))+
+    xlab("Time (mins)")+
+    ylab("DO (uM)")
+  
+##Plots of raw data
+  
+good.DO<-subset(subdat.DO, samplenum==5 |samplenum==6)
+
+ggplot(good.DO, aes(time.since, odo.uM))+
+  geom_point()+
+  geom_smooth(method='lm', formula= y~x)+
+  facet_grid(level~metab, scales='free',
+             labeller = labeller( metab=metab.labs))+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=16,color="black"))+
+  theme(axis.title.y=element_text(size=16,color="black"))+
+  theme(axis.text.y=element_text(size=16,color="black"))+
+  theme(axis.text.x=element_text(size=16,color="black"))+
+  xlab("Time (min.)")+
+  ylab(expression(paste("DO (",mu,"M ",O[2],")")))+
+  theme(strip.text.y = element_blank(),strip.text.x = element_text(size = 12))
+
+good.DIC<-subset(subdat.DIC, samplenum==5 |samplenum==6)
+
+ggplot(good.DIC, aes(time.since, DIC.uM))+
+  geom_point()+
+  geom_smooth(method='lm', formula= y~x)+
+  facet_grid(level~metab, scales='free',
+             labeller = labeller( metab=metab.labs))+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=16,color="black"))+
+  theme(axis.title.y=element_text(size=16,color="black"))+
+  theme(axis.text.y=element_text(size=16,color="black"))+
+  theme(axis.text.x=element_text(size=16,color="black"))+
+  xlab("Time (min.)")+
+  ylab(expression(paste("DIC (",mu,"M C)")))+
+  theme(strip.text.y = element_blank(),strip.text.x = element_text(size = 12))
 
 
+## productivity vs PQ
+ggplot(meta.final, aes(GPP.dic,PQ))+
+  geom_point(size=3)+
+  geom_smooth(method='lm', formula= y~x,se = FALSE)+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=18,color="black"))+
+  theme(axis.title.y=element_text(size=18,color="black"))+
+  theme(axis.text.y=element_text(size=18,color="black"))+
+  theme(axis.text.x=element_text(size=18,color="black"))+
+  xlab("GPP")+
+  xlim(c(-30,1))+
+  ylim(c(0.5,3.5))+
+  xlab(expression(paste("GPP (",mu,"moles DIC ",m^-2," ",hr^-1 ,")")))
+
+ggplot(meta.final, aes(GPP.do,PQ))+
+  geom_point(size=3)+
+  geom_smooth(method='lm', formula= y~x,se = FALSE)+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=18,color="black"))+
+  theme(axis.title.y=element_text(size=18,color="black"))+
+  theme(axis.text.y=element_text(size=18,color="black"))+
+  theme(axis.text.x=element_text(size=18,color="black"))+
+  xlab("GPP")+
+  ylab("PQ")+
+  xlim(c(0,30))+
+  ylim(c(0.5,3.5))+
+  xlab(expression(paste("GPP (",mu,"moles ", O[2]," ", m^-2," ",hr^-1 ,")")))
+
+ggplot(meta.final, aes(mean.light,PQ))+
+  geom_point(size=3)+
+  geom_smooth(method='lm', formula= y~x,se = FALSE)+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=16,color="black"))+
+  theme(axis.title.y=element_text(size=16,color="black"))+
+  theme(axis.text.y=element_text(size=16,color="black"))+
+  theme(axis.text.x=element_text(size=16,color="black"))+
+  xlab("GPP")+
+  ylab("PQ")
+  #xlim(c(0,60000))
+  #ylim(c(0.5,3.5))+
+  #xlab(expression(paste("GPP (",mu,"moles ", O[2]," ", m^-2," ",hr^-1 ,")")))
+
+lm(PQ~GPP.do, data=meta.final)
+
+ggplot(meta.final, aes(x=abs(GPP.dic), y=GPP.do), size=PQ)+
+  geom_point(aes(size=PQ))+
+  geom_abline(intercept = 0, slope = 1, linetype=2, size=1.2)+
+  #geom_smooth(method='lm', formula= y~x,se = FALSE)+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=18,color="black"))+
+  theme(axis.title.y=element_text(size=18,color="black"))+
+  theme(axis.text.y=element_text(size=18,color="black"))+
+  theme(axis.text.x=element_text(size=18,color="black"))+
+  xlim(c(0,30))+
+  ylim(c(0,30))+
+  xlab(expression(paste("GPP (",mu,"mol ", O[2]," ", m^-2," ",hr^-1 ,")")))+
+  ylab(expression(paste("GPP (",mu,"mol DIC " , m^-2," ",hr^-1 ,")")))
+  
+ggplot(meta.final, aes(y=PQ))+
+  geom_boxplot(width=0.5)+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=18,color="black"))+
+  theme(axis.title.y=element_text(size=18,color="black"))+
+  theme(axis.text.y=element_text(size=18,color="black"))+
+  theme(axis.text.x=element_text(size=18,color="black"))+
+  ylim(c(0.4,3.5))
+  
