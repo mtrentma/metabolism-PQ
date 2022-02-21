@@ -9,7 +9,7 @@ library(reshape2)
 library(xts)
 library(dygraphs)
 library(tidyr)
-
+library(patchwork)
 # Read/format chamber SAMI CO2 data ---------------------------------------------
 
 setwd("C:/Users/matt/IDrive-Sync/Postdoc/Chamber metabolism/Chambers2021")
@@ -256,7 +256,7 @@ ggplot(subdat.DO, aes(time.since, odo.uM))+
 subdat.DO$odo.uM[c(1158:1198)]<-NA
 
 ##Replot
-ggplot(subdat.DO, aes(time.since, odo.uM))+
+ggplot(subdat.DO, aes(time.since, odo.sat))+
   geom_point()+
   geom_smooth(method='lm', formula= y~x)+
   facet_wrap(~samplenum, ncol=4,scales='free')
@@ -273,9 +273,22 @@ slope<-
     data.frame(odo.uM.slope = coef(mod)[2])
   })
 
+##Calculate the slope for each experiment
+o2.sat.mean<-
+  subdat.DO %>% 
+  group_by(samplenum) %>% 
+  summarise(mean.sat=mean(odo.sat))
+
+o2.sat.max<-
+  subdat.DO %>% 
+  group_by(samplenum) %>% 
+  summarise(max.sat=max(odo.sat))
+
+
 ##Join to meta file
 meta.final<- full_join(meta.final,slope)
-
+meta.final<- full_join(meta.final,o2.sat.mean)
+meta.final<- full_join(meta.final,o2.sat.max)
 #meta.final$DIC.uM.slope[3]<-0.15##average of other two dark delta DIC
 
 
@@ -352,6 +365,8 @@ PQ<-PQ.DO/PQ.DIC
 PQ.C<-PQ.DO/PQ.CO2
 PQ[c(4,5,6,7,8,9,13,14,15,16,17,18)]<-NA
 PQ.C[c(4,5,6,7,8,9,13,14,15,16,17,18)]<-NA
+PQ.DO[c(4,5,6,7,8,9,13,14,15,16,17,18)]<-NA
+PQ.DIC[c(4,5,6,7,8,9,13,14,15,16,17,18)]<-NA
 abs(PQ)
 abs(PQ.C)
 samplenum<-seq(from=2, to=36, by=2)
@@ -651,12 +666,30 @@ ggplot(meta.final, aes(mean.light,PQ))+
   #ylim(c(0.5,3.5))+
   #xlab(expression(paste("GPP (",mu,"moles ", O[2]," ", m^-2," ",hr^-1 ,")")))
 
-lm(PQ~GPP.do, data=meta.final)
+lm(GPP.do~abs(GPP.dic), data=meta.final)
 
-ggplot(meta.final, aes(x=abs(GPP.dic), y=GPP.do), size=PQ)+
-  geom_point(aes(size=PQ))+
+smaSlope <- function(x, y) {
+  b1 <- sd(y)/sd(x)
+  b1
+}
+
+x<-na.omit(abs(meta.final$GPP.dic))
+y<-na.omit(meta.final$GPP.do)
+
+smaSlope(x,y)
+
+smaIntercept <- function(x, y) {
+  b1 <- smaSlope(x, y)
+  b0 <- mean(y) - mean(x)*b1
+  b0
+}
+
+smaIntercept(x,y)
+
+p1<-ggplot(meta.final, aes(x=abs(GPP.dic), y=GPP.do))+
+  geom_point(size=3)+
   geom_abline(intercept = 0, slope = 1, linetype=2, size=1.2)+
-  #geom_smooth(method='lm', formula= y~x,se = FALSE)+
+  geom_abline(intercept = 1.61, slope = 1.64, linetype=1, size=1.2, color="blue")+
   theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
   theme(axis.title.x=element_text(size=18,color="black"))+
   theme(axis.title.y=element_text(size=18,color="black"))+
@@ -664,15 +697,60 @@ ggplot(meta.final, aes(x=abs(GPP.dic), y=GPP.do), size=PQ)+
   theme(axis.text.x=element_text(size=18,color="black"))+
   xlim(c(0,30))+
   ylim(c(0,30))+
-  xlab(expression(paste("GPP (",mu,"mol ", O[2]," ", m^-2," ",hr^-1 ,")")))+
-  ylab(expression(paste("GPP (",mu,"mol DIC " , m^-2," ",hr^-1 ,")")))
+  ylab(expression(paste("GPP (",mu,"mol ", O[2]," ", m^-2," ",hr^-1 ,")")))+
+  xlab(expression(paste("GPP (",mu,"mol DIC " , m^-2," ",hr^-1 ,")")))
   
-ggplot(meta.final, aes(y=PQ))+
-  geom_boxplot(width=0.5)+
+
+p2<-ggplot(meta.final, aes(y=PQ))+
+  geom_boxplot()+
   theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
   theme(axis.title.x=element_text(size=18,color="black"))+
   theme(axis.title.y=element_text(size=18,color="black"))+
   theme(axis.text.y=element_text(size=18,color="black"))+
-  theme(axis.text.x=element_text(size=18,color="black"))+
-  ylim(c(0.4,3.5))
+  theme(axis.text.x=element_text(size=18,color="black"),
+        axis.ticks.x=element_blank())+
+  scale_y_continuous(limits=c(0,3.5), breaks=seq(from=0, to=3.5, by=.5))+
+  theme(axis.text.x=element_blank())+
+  theme(axis.title.x=element_blank())
   
+graph<-p1+p2+plot_layout(widths = c(3,1))
+
+dev.new()
+grDevices::cairo_pdf("chamber_data.pdf", width = 6.5, height = 4,)
+print(graph)
+dev.off()
+
+
+ggplot(meta.final, aes(max.sat,GPP.do))+
+  geom_point(aes(size=PQ))+
+  #geom_smooth(method='lm', formula= y~x,se = FALSE)+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=16,color="black"))+
+  theme(axis.title.y=element_text(size=16,color="black"))+
+  theme(axis.text.y=element_text(size=16,color="black"))+
+  theme(axis.text.x=element_text(size=16,color="black"))+
+  xlab("Max O2")+
+  ylab("GPP (Oxy)")
+
+ggplot(meta.final, aes(max.sat,GPP.do))+
+  geom_point(size=2)+
+  #geom_smooth(method='lm', formula= y~x,se = FALSE)+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=16,color="black"))+
+  theme(axis.title.y=element_text(size=16,color="black"))+
+  theme(axis.text.y=element_text(size=16,color="black"))+
+  theme(axis.text.x=element_text(size=16,color="black"))+
+  xlab("Max O2")+
+  ylab("GPP (DO)")
+
+ggplot(meta.final, aes(max.sat,GPP.dic))+
+  geom_point(size=2)+
+  geom_smooth(method='lm', formula= y~x,se = FALSE)+
+  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(axis.title.x=element_text(size=16,color="black"))+
+  theme(axis.title.y=element_text(size=16,color="black"))+
+  theme(axis.text.y=element_text(size=16,color="black"))+
+  theme(axis.text.x=element_text(size=16,color="black"))+
+  xlab("Max O2")+
+  ylab("GPP (DIC)")
+  scale_size_continuous(range = c(1,3))
