@@ -1,3 +1,7 @@
+
+# Beginning Figure 6 ------------------------------------------------------
+
+
 library(lubridate)
 library(data.table)
 library(plyr)
@@ -10,9 +14,10 @@ library(xts)
 library(dygraphs)
 library(tidyr)
 library(patchwork)
-# Read/format chamber SAMI CO2 data ---------------------------------------------
 
-setwd("C:/Users/matt/IDrive-Sync/Postdoc/Chamber metabolism/Chambers2021")
+setwd("~/GitHub/metabolism-PQ/Figure 6")
+
+# Read/format chamber SAMI CO2 data ---------------------------------------------
 sco2.data = read.csv("chamber.co2.all.csv",header=T)
 sco2.data$date.time<-as.POSIXct(paste(sco2.data$date, sco2.data$time),format="%m-%d-%Y %H:%M:%S",tz="UTC")
 sco2.data$date.time<-format(sco2.data$date.time, tz="America/Denver")
@@ -117,7 +122,6 @@ sco2.data$DIC.uM<-carb$D*1000*1000
 # DIC ---------------------------------------------------------------------
 
 
-setwd("C:/Users/matt/IDrive-Sync/Postdoc/Chamber metabolism/Chambers2021")
 meta<-read.csv("chamber.notes.all.csv",header=T)
 meta$start.date.time<-as.POSIXct(paste(meta$date, meta$start.time),format="%m-%d-%Y %H:%M:%S",tz="")
 meta$end.date.time<-as.POSIXct(paste(meta$date, meta$end.time),format="%m-%d-%Y %H:%M:%S",tz="")
@@ -168,9 +172,6 @@ subdat.DIC %>%
   geom_point() %.>%
   geom_smooth(method='lm', formula= y~x) %.>%
   facet_wrap(metab~date,  scales = "free")
-
-
-
 
 
 ##Remove obviously bad data points
@@ -396,295 +397,7 @@ meta.final$GPP.dic[c(8,10,12,14,16,18,26,28,30,32,34,36)]<-NA
 meta.final$GPP.do[c(8,10,12,14,16,18,26,28,30,32,34,36)]<-NA
 
 
-# Calculate ancillary variables ------------------------------------------
-
-#light
-meta<-read.csv("chamber.notes.all.csv",header=T)
-meta$start.date.time<-as.POSIXct(paste(meta$date, meta$start.time),format="%m-%d-%Y %H:%M:%S",tz="")
-meta$end.date.time<-as.POSIXct(paste(meta$date, meta$end.time),format="%m-%d-%Y %H:%M:%S",tz="")
-
-light<-read.csv("chamber.light.all.csv",header=T)
-names(light)<-c("date.time", "temp", "brightness")
-light$date.time<-as.POSIXct(light$date.time,format="%m-%d-%Y %H:%M:%S",tz="")
-
-subdat<-list()
-
-for(i in 7:length(meta$level)){
-  
-  subdat[[i]]<-subset(light, date.time>meta$start.date.time[i]  & date.time< meta$end.date.time[i])
-  subdat[[i]]$samplenum <-i
-  
-}
-subdat <- bind_rows(subdat)
-
-## Look at time series traces plotted over original data
-## and decide on new Reset time if necessary
-
-
-ggplot(subdat, aes(date.time, brightness))+
-  geom_point()+
-  facet_wrap(~samplenum, ncol=4,scales='free')
-
-
-##Calculate the mean for each experiment
-result<-ddply(subdat,.(samplenum), summarize,
-              mean.light=mean(brightness,na.rm=TRUE))
-
-##Join to meta file
-meta.final<- full_join(meta.final,result)
-meta.final$metab<-as.factor(meta.final$metab)
-meta.final$treatment<-as.factor(meta.final$treatment)
-meta.final$level<-as.factor(meta.final$level)
-
-
 ##Plot
-ggplot(meta.final, aes(DIC.uM.slope, light, color=treatment))+
-  geom_point()
-  facet_grid(~metab)
-  
-#temperature
-  meta<-read.csv("chamber.notes.all.csv",header=T)
-  meta$start.date.time<-as.POSIXct(paste(meta$date, meta$start.time),format="%m-%d-%Y %H:%M:%S",tz="")
-  meta$end.date.time<-as.POSIXct(paste(meta$date, meta$end.time),format="%m-%d-%Y %H:%M:%S",tz="")
-  
-  
-  subdat<-list()
-  
-  for(i in 1:length(meta$level)){
-    
-    subdat[[i]]<-subset(o2.data, date.time>meta$start.date.time[i]  & date.time< meta$end.date.time[i])
-    subdat[[i]]$samplenum <-i
-    
-  }
-  subdat <- bind_rows(subdat)
-  
-  ## Look at time series traces plotted over original data
-  ## and decide on new Reset time if necessary
-  
-  
-  ggplot(subdat, aes(date.time, temp.c))+
-    geom_point()+
-    facet_wrap(~samplenum, ncol=4,scales='free')
-  
-  
-  ##Calculate the mean for each experiment
-  result.temp<-ddply(subdat,.(samplenum), summarize,
-                mean.temp=mean(temp.c,na.rm=TRUE))
-  
-  ##Join to meta file
-  meta.final<- full_join(meta.final,result.temp)
-  
-  ##Plot
-  ggplot(meta.final, aes(mean.temp, DIC.uM.slope, color=treatment, shape=level))+
-    geom_point()+
-  facet_grid(~metab)
-  
-  
-meta.final.good<-subset(meta.final, !is.na(meta.final$PQ))
-  
-  
-##Summary plot
-  # New facet label names for dose variable
-  metab.labs <- c("Dark", "Light")
-  names(metab.labs ) <- c("dark", "light")
-  
-  # New facet label names for supp variable
-  level.prod.labs <- c("High Prod.", "Med Prod.", "Low Prod.")
-  names(level.prod.labs) <- c("1", "2", "3")  
-  
-  # New facet label names for supp variable
-  level.vel.labs <- c("Low Vel.","Med Vel." , "High Vel.")
-  names(level.vel.labs) <- c("1", "2", "3")  
-  
-  
-#velocity
-#DIC
-good.sampnum<-meta.final$samplenum[which(!is.na(PQ))]
-good.DIC.vel<-subset(subdat.DIC,samplenum==1|samplenum==2|samplenum==3|samplenum==4|samplenum==5|samplenum==6)
-good.DIC.vel$level<-as.factor(good.DIC.vel$level)
-good.DIC.vel$level<-factor(good.DIC.vel$level,levels=(c("1","2","3")))
-good.DIC.vel$metab<-as.factor(good.DIC.vel$metab)
-
-##Plot
-
-ggplot(good.DIC.vel, aes(time.since, DIC.uM))+
-  geom_point()+
-  geom_smooth(method='lm', formula= y~x)+
-  facet_grid(level~metab, scales='free',
-             labeller = labeller(level=level.vel.labs, metab=metab.labs))+
-  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.x=element_text(size=16,color="black"))+
-  theme(axis.title.y=element_text(size=16,color="black"))+
-  theme(axis.text.y=element_text(size=16,color="black"))+
-  theme(axis.text.x=element_text(size=16,color="black"))+
-  xlab("Time (mins)")+
-  ylab("DIC (uM)")
-
-#DO
-good.sampnum<-meta.final$samplenum[which(!is.na(PQ))]
-good.DO.vel<-subset(subdat.DO,samplenum==1|samplenum==2|samplenum==3|samplenum==4|samplenum==5|samplenum==6)
-good.DO.vel$level<-as.factor(good.DO.vel$level)
-good.DO.vel$level<-factor(good.DO.vel$level,levels=(c("1","2","3")))
-good.DO.vel$metab<-as.factor(good.DO.vel$metab)
-
-##Plot
-
-ggplot(good.DO.vel, aes(time.since, odo.uM))+
-  geom_point()+
-  geom_smooth(method='lm', formula= y~x)+
-  facet_grid(level~metab, scales='free',
-             labeller = labeller(level=level.vel.labs, metab=metab.labs))+
-  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.x=element_text(size=16,color="black"))+
-  theme(axis.title.y=element_text(size=16,color="black"))+
-  theme(axis.text.y=element_text(size=16,color="black"))+
-  theme(axis.text.x=element_text(size=16,color="black"))+
-  xlab("Time (mins)")+
-  ylab("DO(uM)")
-
-
-
-
-#productivity
-#DIC
-  good.DIC.prod<-subset(subdat.DIC,samplenum==19|samplenum==20|samplenum==21|samplenum==22|samplenum==23|samplenum==24)
-  good.DIC.prod$level<-as.factor(good.DIC.prod$level)
-  good.DIC.prod$level<-factor(good.DIC.prod$level,levels=(c("3","2","1")))
-  good.DIC.prod$metab<-as.factor(good.DIC.prod$metab)
-
-  ##Plot
- 
-  
-  ggplot(good.DIC.prod, aes(time.since, DIC.uM))+
-    geom_point()+
-    geom_smooth(method='lm', formula= y~x)+
-    facet_grid(level~metab, scales='free',
-               labeller = labeller(level=level.prod.labs, metab=metab.labs))+
-    theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-    theme(axis.title.x=element_text(size=16,color="black"))+
-    theme(axis.title.y=element_text(size=16,color="black"))+
-    theme(axis.text.y=element_text(size=16,color="black"))+
-    theme(axis.text.x=element_text(size=16,color="black"))+
-    xlab("Time (mins)")+
-    ylab("DIC (uM)")
-
-#DO
-  good.DO.prod<-subset(subdat.DO,samplenum==19|samplenum==20|samplenum==21|samplenum==22|samplenum==23|samplenum==24)
-  good.DO.prod$level<-as.factor(good.DO.prod$level)
-  good.DO.prod$level<-factor(good.DO.prod$level,levels=(c("3","2","1")))
-  good.DO.prod$metab<-as.factor(good.DO.prod$metab)
-  ##Plot
-  
-  
-  ggplot(good.DO.prod, aes(time.since, odo.uM))+
-    geom_point()+
-    geom_smooth(method='lm', formula= y~x)+
-    facet_grid(level~metab, scales='free',
-               labeller = labeller(level=level.prod.labs, metab=metab.labs))+
-    theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-    theme(axis.title.x=element_text(size=16,color="black"))+
-    theme(axis.title.y=element_text(size=16,color="black"))+
-    theme(axis.text.y=element_text(size=16,color="black"))+
-    theme(axis.text.x=element_text(size=16,color="black"))+
-    xlab("Time (mins)")+
-    ylab("DO (uM)")
-  
-##Plots of raw data
-  
-good.DO<-subset(subdat.DO, samplenum==5 |samplenum==6)
-
-ggplot(good.DO, aes(time.since, odo.uM))+
-  geom_point()+
-  geom_smooth(method='lm', formula= y~x)+
-  facet_grid(level~metab, scales='free',
-             labeller = labeller( metab=metab.labs))+
-  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.x=element_text(size=16,color="black"))+
-  theme(axis.title.y=element_text(size=16,color="black"))+
-  theme(axis.text.y=element_text(size=16,color="black"))+
-  theme(axis.text.x=element_text(size=16,color="black"))+
-  xlab("Time (min.)")+
-  ylab(expression(paste("DO (",mu,"M ",O[2],")")))+
-  theme(strip.text.y = element_blank(),strip.text.x = element_text(size = 12))
-
-good.DIC<-subset(subdat.DIC, samplenum==5 |samplenum==6)
-
-ggplot(good.DIC, aes(time.since, DIC.uM))+
-  geom_point()+
-  geom_smooth(method='lm', formula= y~x)+
-  facet_grid(level~metab, scales='free',
-             labeller = labeller( metab=metab.labs))+
-  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.x=element_text(size=16,color="black"))+
-  theme(axis.title.y=element_text(size=16,color="black"))+
-  theme(axis.text.y=element_text(size=16,color="black"))+
-  theme(axis.text.x=element_text(size=16,color="black"))+
-  xlab("Time (min.)")+
-  ylab(expression(paste("DIC (",mu,"M C)")))+
-  theme(strip.text.y = element_blank(),strip.text.x = element_text(size = 12))
-
-
-## productivity vs PQ
-ggplot(meta.final, aes(GPP.dic,PQ))+
-  geom_point(size=3)+
-  geom_smooth(method='lm', formula= y~x,se = FALSE)+
-  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.x=element_text(size=18,color="black"))+
-  theme(axis.title.y=element_text(size=18,color="black"))+
-  theme(axis.text.y=element_text(size=18,color="black"))+
-  theme(axis.text.x=element_text(size=18,color="black"))+
-  xlab("GPP")+
-  xlim(c(-30,1))+
-  ylim(c(0.5,3.5))+
-  xlab(expression(paste("GPP (",mu,"moles DIC ",m^-2," ",hr^-1 ,")")))
-
-ggplot(meta.final, aes(GPP.do,PQ))+
-  geom_point(size=3)+
-  geom_smooth(method='lm', formula= y~x,se = FALSE)+
-  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.x=element_text(size=18,color="black"))+
-  theme(axis.title.y=element_text(size=18,color="black"))+
-  theme(axis.text.y=element_text(size=18,color="black"))+
-  theme(axis.text.x=element_text(size=18,color="black"))+
-  xlab("GPP")+
-  ylab("PQ")+
-  xlim(c(0,30))+
-  ylim(c(0.5,3.5))+
-  xlab(expression(paste("GPP (",mu,"moles ", O[2]," ", m^-2," ",hr^-1 ,")")))
-
-ggplot(meta.final, aes(mean.light,PQ))+
-  geom_point(size=3)+
-  geom_smooth(method='lm', formula= y~x,se = FALSE)+
-  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.x=element_text(size=16,color="black"))+
-  theme(axis.title.y=element_text(size=16,color="black"))+
-  theme(axis.text.y=element_text(size=16,color="black"))+
-  theme(axis.text.x=element_text(size=16,color="black"))+
-  xlab("GPP")+
-  ylab("PQ")
-  #xlim(c(0,60000))
-  #ylim(c(0.5,3.5))+
-  #xlab(expression(paste("GPP (",mu,"moles ", O[2]," ", m^-2," ",hr^-1 ,")")))
-
-lm(GPP.do~abs(GPP.dic), data=meta.final)
-
-smaSlope <- function(x, y) {
-  b1 <- sd(y)/sd(x)
-  b1
-}
-
-x<-na.omit(abs(meta.final$GPP.dic))
-y<-na.omit(meta.final$GPP.do)
-
-smaSlope(x,y)
-
-smaIntercept <- function(x, y) {
-  b1 <- smaSlope(x, y)
-  b0 <- mean(y) - mean(x)*b1
-  b0
-}
-
-smaIntercept(x,y)
 
 p1<-ggplot(meta.final, aes(x=abs(GPP.dic), y=GPP.do))+
   geom_point(size=3)+
@@ -699,58 +412,18 @@ p1<-ggplot(meta.final, aes(x=abs(GPP.dic), y=GPP.do))+
   ylim(c(0,30))+
   ylab(expression(paste("GPP (",mu,"mol ", O[2]," ", m^-2," ",hr^-1 ,")")))+
   xlab(expression(paste("GPP (",mu,"mol DIC " , m^-2," ",hr^-1 ,")")))
-  
 
-p2<-ggplot(meta.final, aes(y=PQ))+
-  geom_boxplot()+
-  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.x=element_text(size=18,color="black"))+
-  theme(axis.title.y=element_text(size=18,color="black"))+
-  theme(axis.text.y=element_text(size=18,color="black"))+
-  theme(axis.text.x=element_text(size=18,color="black"),
-        axis.ticks.x=element_blank())+
-  scale_y_continuous(limits=c(0,3.5), breaks=seq(from=0, to=3.5, by=.5))+
-  theme(axis.text.x=element_blank())+
-  theme(axis.title.x=element_blank())
-  
-graph<-p1+p2+plot_layout(widths = c(3,1))
 
 dev.new()
-grDevices::cairo_pdf("chamber_data.pdf", width = 6.5, height = 4,)
-print(graph)
+grDevices::cairo_pdf("chamber_data.pdf", width = 4.5, height = 4,)
+print(p1)
 dev.off()
 
+## Calculate slope and st dev
 
-ggplot(meta.final, aes(max.sat,GPP.do))+
-  geom_point(aes(size=PQ))+
-  #geom_smooth(method='lm', formula= y~x,se = FALSE)+
-  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.x=element_text(size=16,color="black"))+
-  theme(axis.title.y=element_text(size=16,color="black"))+
-  theme(axis.text.y=element_text(size=16,color="black"))+
-  theme(axis.text.x=element_text(size=16,color="black"))+
-  xlab("Max O2")+
-  ylab("GPP (Oxy)")
+library(lmodel2)
+model<-lmodel2(y~x, data=mydata,"interval","interval",99)
+model
 
-ggplot(meta.final, aes(max.sat,GPP.do))+
-  geom_point(size=2)+
-  #geom_smooth(method='lm', formula= y~x,se = FALSE)+
-  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.x=element_text(size=16,color="black"))+
-  theme(axis.title.y=element_text(size=16,color="black"))+
-  theme(axis.text.y=element_text(size=16,color="black"))+
-  theme(axis.text.x=element_text(size=16,color="black"))+
-  xlab("Max O2")+
-  ylab("GPP (DO)")
 
-ggplot(meta.final, aes(max.sat,GPP.dic))+
-  geom_point(size=2)+
-  geom_smooth(method='lm', formula= y~x,se = FALSE)+
-  theme_bw()+theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  theme(axis.title.x=element_text(size=16,color="black"))+
-  theme(axis.title.y=element_text(size=16,color="black"))+
-  theme(axis.text.y=element_text(size=16,color="black"))+
-  theme(axis.text.x=element_text(size=16,color="black"))+
-  xlab("Max O2")+
-  ylab("GPP (DIC)")
-  scale_size_continuous(range = c(1,3))
+

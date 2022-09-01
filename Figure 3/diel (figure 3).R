@@ -1,19 +1,27 @@
-library(chron) #this is how we used to do time.  Unwilling to change for this exercise
+
+
+# Load Libraries ----------------------------------------------------------
+
+library(chron) 
 library(ggplot2)
 library(patchwork)
 library(reshape2); library(dplyr); library(tidyr)
+
+
+
+
+# Simulate time -----------------------------------------------------------
+
+
 Sys.setenv(TZ='GMT')
-#make up some time data
 
 time<-seq(from = as.numeric(chron(dates="05/21/22", times="02:00:00")),
           to=as.numeric(chron(dates="05/22/22", times="04:00:00")), by=10/1440 )
 dtime<- chron(time)
 
 
-######simulate O2 saturation######
 
-##Make up light data
-## now make up light data if you don't have it
+# Simulate light data -----------------------------------------------------
 
 ## From Yard et al. (1995) Ecological Modelling.  Remember your trig?  
 ## calculate light as umol photon m-2 s-1.
@@ -25,11 +33,10 @@ dtime<- chron(time)
 ## year = the year for which you collected data and is entered as "2013-01-01"
 
 
-
-# convert degrees to radians
+## convert degrees to radians
 radi<-function(degrees){(degrees*pi/180)}
 
-# function to estimate light
+## function to estimate light
 lightest<- function (time, lat, longobs, longstd, year ) {
   
   jday<-as.numeric(trunc(time)-as.numeric(as.Date(year)))
@@ -46,16 +53,24 @@ lightest<- function (time, lat, longobs, longstd, year ) {
 }
 #end of function
 
-## onespecific time just to see if function works
+## Use function to simulate light
 light<- lightest(time=dtime, lat=47,  longobs=114, longstd= 105, year="2022-01-01")
 
-#fake some temp
+
+# Simulate temperature ----------------------------------------------------
 temp<- rep(15, length(light))  #too cold to swim in
+
+
+
+# Function to simulate gas-exchange ---------------------------------------------------
+
 
 Kcor<-function (temp,K600) {
   K600/(600/(1800.6-(temp*120.1)+(3.7818*temp^2)-(0.047608*temp^3)))^-0.5
 }
 #end of function
+
+# Function to simulate oxygen concentration
 
 osat<- function(temp, bp) {
   
@@ -74,15 +89,12 @@ osat<- function(temp, bp) {
   sato
 }
 
-#end of function
+##end of function
 
 
+# Simulate oxygen ------------------------------------------
 
-
-
-
-
-#Low GPP and low NO3- simulate oxy data
+# Function simulate low GPP oxygen
 onestationsim<-function(GPP, ER, z, temp, K, light, bp, ts) {
   
   oxy.mod<-numeric(length(light))
@@ -94,18 +106,23 @@ onestationsim<-function(GPP, ER, z, temp, K, light, bp, ts) {
 }
 # end of function
 
-#tw more functions you need
+# SCENARIO 1: Low GPP and low NO3
+## Known (simulated) parameters. These values were picked to create a scenario where % O2sat stayed at or below %100
+## All non-metabolic variables are held constant except light(depth, gas-exchange, pressure, temperature).
+lowgpp<-0.6
+lowER<--1.5# scales with GPP
+depth=1 #constant
+K=15 #constant
+bp=760 #constant
+
+sim_oxy<- onestationsim(GPP=lowgpp, ER=lowER,z=depth,temp=temp,light=light, K=K, bp=bp, ts=10/1440) #Run simulation function with given parameters
+sim_oxy_sat<-100*sim_oxy/osat(temp, 760)# transform from concentration to O2 sat
+data_lowgpp<-data.frame(dtime, sim_oxy_sat) #format
+data_lowgpp$dtime<-as.POSIXct(data_lowgpp$dtime) #format
+data_lowgpp$time<-as.POSIXct(data_lowgpp$dtime, format="%H:%M:%S") #format
 
 
-
-sim_oxy<- onestationsim(GPP=0.6, ER=-1.5,z=1,temp=temp,light=light, K=15, bp=760, ts=10/1440)
-sim_oxy_sat<-100*sim_oxy/osat(temp, 760)
-data_lowgpp<-data.frame(dtime, sim_oxy_sat)
-data_lowgpp$dtime<-as.POSIXct(data_lowgpp$dtime)
-data_lowgpp$time<-as.POSIXct(data_lowgpp$dtime, format="%H:%M:%S")
-
-
-
+## Plot low GPP and low NO3 % oxygen data
 p1<-
   ggplot(data_lowgpp, aes(x=time, y=sim_oxy_sat))+
   geom_rect(aes( xmin=time[20], xmax=time[111], ymin=-Inf, ymax=Inf, fill="Daytime"), color=NA, alpha=0.2)+
@@ -113,25 +130,26 @@ p1<-
   theme_classic()+
   ylab(expression(paste(O[2], " saturation (%)")))+
   xlab("Time of Day")+
-  theme(axis.title.x=element_text(size=14,colour = "black"))+
-  theme(axis.title.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.x=element_text(size=14,colour = "black"))+
+  theme(axis.title.x=element_text(size=10,colour = "black"))+
+  theme(axis.title.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.x=element_text(size=8,colour = "black"))+
   scale_x_datetime(date_labels = "%H:%M", date_breaks = "6 hours", limits=c(as.POSIXct("2022-05-21 02:00:00"), as.POSIXct("2022-05-22 02:00:00")))+
-  scale_y_continuous(limits=c(90,110), breaks=seq(from=80, to=130, by=10))+
+  scale_y_continuous(limits=c(93,110), breaks=seq(from=80, to=130, by=5))+
   geom_hline(yintercept=100,linetype="dashed", size=1)+
-  #annotate("rect", xmin=data_lowgpp$time[20], xmax=data_lowgpp$time[111], ymin=-Inf, ymax=Inf, fill = "gray", alpha=0.2)+
-  ggtitle(expression(paste("GPP= 19 mmol ", O[2]," ", m^-3," ",d^-1 ,"")))+
   theme(axis.title.x=element_blank())+
   theme(plot.title = element_text(size = 12))+
   scale_fill_manual('',
-                    values = 'aliceblue',  
+                    values = 'lightblue',  
                     guide = guide_legend(override.aes = list(alpha = 0.2)))+
   theme(legend.text=element_text(size=12),legend.position="none")
   
   
+  
 
-#High GPP- simulate oxy data
+#SCENARIO 2: High GPP and low NO3
+
+# Function simulate high GPP oxygen
 onestationsim<-function(GPP, ER, z, temp, K, light, bp, ts) {
   
   oxy.mod<-numeric(length(light))
@@ -143,206 +161,212 @@ onestationsim<-function(GPP, ER, z, temp, K, light, bp, ts) {
 }
 # end of function
 
-#tw more functions you need
+##parameters. These values were picked to have an O2 saturation curve that goes above 110. Only GPP and ER are different from the first scenario.
+highgpp<-8
+highER<--8# scales with GPP
+
+sim_oxy<- onestationsim(GPP=highgpp, ER=highER,z=depth,temp=temp,light=light, K=K, bp=bp, ts=10/1440)
+sim_oxy_sat<-100*sim_oxy/osat(temp, 760)# transform from concentration to O2 sat
+data_highgpp<-data.frame(dtime, sim_oxy_sat)# format
+data_highgpp$dtime<-as.POSIXct(data_lowgpp$dtime) # format
+data_highgpp$time<-as.POSIXct(data_lowgpp$dtime, format="%H:%M:%S")# format
 
 
-
-sim_oxy<- onestationsim(GPP=8, ER=-8,z=1,temp=temp,light=light, K=15, bp=760, ts=10/1440)
-sim_oxy_sat<-100*sim_oxy/osat(temp, 760)
-data_highgpp<-data.frame(dtime, sim_oxy_sat)
-data_highgpp$dtime<-as.POSIXct(data_lowgpp$dtime)
-data_highgpp$time<-as.POSIXct(data_lowgpp$dtime, format="%H:%M:%S")
-
-
-
+## Plot high GPP and low NO3 % oxygen data
 p2<-ggplot(data_highgpp, aes(x=time, y=sim_oxy_sat))+
   geom_rect(aes( xmin=time[20], xmax=time[111], ymin=-Inf, ymax=Inf, fill="Daytime"), color=NA, alpha=0.2)+
   geom_line(size=1)+
   theme_classic()+
   ylab(expression(paste(O[2], " saturation (%)")))+
   xlab("Time of Day")+
-  theme(axis.title.x=element_text(size=14,colour = "black"))+
-  theme(axis.title.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.x=element_text(size=14,colour = "black"))+
+  theme(axis.title.x=element_text(size=10,colour = "black"))+
+  theme(axis.title.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.x=element_text(size=8,colour = "black"))+
   scale_x_datetime(date_labels = "%H:%M", date_breaks = "6 hours", limits=c(as.POSIXct("2022-05-21 02:00:00"), as.POSIXct("2022-05-22 02:00:00")))+
-  scale_y_continuous(limits=c(90,110), breaks=seq(from=80, to=130, by=10))+
+  scale_y_continuous(limits=c(93,110), breaks=seq(from=80, to=130, by=5))+
   geom_hline(yintercept=100,linetype="dashed", size=1)+
-  ggtitle(expression(paste("GPP= 250 mmol ", O[2]," ", m^-3," ",d^-1 ,"; low ", NO[3])))+
   theme(axis.title.x=element_blank(),axis.title.y=element_blank())+
   theme(plot.title = element_text(size = 12))+
   scale_fill_manual('',
-                    values = 'aliceblue',  
+                    values = 'lightblue',  
                     guide = guide_legend(override.aes = list(alpha = 0.2)))+
   theme(legend.text=element_text(size=12),legend.position="none")
 
+
+#SCENARIO 3: High GPP and high NO3
+## Plot high GPP and high NO3 % oxygen data. Same as plot 2, as in this scenario, N availability does not affect production.
 p3<-ggplot(data_highgpp, aes(x=time, y=sim_oxy_sat))+
   geom_rect(aes( xmin=time[20], xmax=time[111], ymin=-Inf, ymax=Inf, fill="Daytime"), color=NA, alpha=0.2)+
   geom_line(size=1)+
   theme_classic()+
   ylab(expression(paste(O[2], " saturation (%)")))+
   xlab("Time of Day")+
-  theme(axis.title.x=element_text(size=14,colour = "black"))+
-  theme(axis.title.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.x=element_text(size=14,colour = "black"))+
+  theme(axis.title.x=element_text(size=10,colour = "black"))+
+  theme(axis.title.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.x=element_text(size=8,colour = "black"))+
   scale_x_datetime(date_labels = "%H:%M", date_breaks = "6 hours", limits=c(as.POSIXct("2022-05-21 02:00:00"), as.POSIXct("2022-05-22 02:00:00")))+
-  scale_y_continuous(limits=c(90,110), breaks=seq(from=80, to=130, by=10))+
+  scale_y_continuous(limits=c(93,110), breaks=seq(from=80, to=130, by=5))+
   geom_hline(yintercept=100,linetype="dashed", size=1)+
-  ggtitle(expression(paste("GPP= 250 mmol ", O[2]," ", m^-3," ",d^-1 ,"; high ", NO[3])))+
   theme(axis.title.x=element_blank(),axis.title.y=element_blank())+
   theme(plot.title = element_text(size = 12))+
   scale_fill_manual('',
-                    values = 'aliceblue',  
+                    values = 'lightblue',  
                     guide = guide_legend(override.aes = list(alpha = 1)))+
-  theme(legend.position="right",legend.text=element_text(size=12), legend.title=element_text(size=15))
+  theme(legend.position="right",legend.text=element_text(size=9), legend.title=element_text(size=10), legend.text.align = 0)
+  
+
+# Simulate PQ data based on simulated oxygen data -------------------------
 
 
-######simulate PQ data######
-
-##Low GPP and low NO3
+# SCENARIO 1: Low GPP and low NO3
 
 #PQ_C is the carbon portion that describes the type of organic molecule synthesized. 
-#For phytoplakton this value is believed to be 1.1. Although, lipid production will likely increase this value
-#during the photic period. 
-pq_c_start<-rep(1.1,times=length(dtime))
-pq_c<-pq_c_start+light*0.000001
+#For phytoplakton this value is believed to be 1.1. 
+pq_c<-1.1
 
-#PQ_N is the NO3 portion. NO3 is low so this is near zero
-pq_n_start<-rep(0.01,times=length(dtime))
-pq_n<-pq_n_start+light*0.000001
+#PQ_N is the NO3 portion. NO3 is low in scenario 1, so this is near zero
+pq_n<-0
 
 #PQ_pr is the photorespiration portion. Low GPP below 100% sat means no PR
-pq_pr<-0.001
+pq_pr<-0
 
 #PQ_net is all combined
 pq_net<-pq_c+pq_n+pq_pr
 
+#Format for plotting
 pq_lowgpp<-melt(data.frame(as.POSIXct(dtime,format="%H:%M:%S"),pq_c, pq_n, pq_pr,pq_net ),id="as.POSIXct.dtime..format.....H..M..S..")
 names(pq_lowgpp)<-c("time","factor","pq_x" )
-labs<-c(expression(phantom("--")*PQ['net']),
-        expression(PQ['c']*phantom("-")),
-        expression(PQ['N']*phantom("-")),
+labs<-c(expression(phantom("--")*PQ['Bio']),
+        expression(PQ['C']*phantom("-")),
+        expression(PQ['NO_3^-']*phantom("-")),
         expression(PQ['Pr']))
 pq_lowgpp$factor<-factor(pq_lowgpp$factor, levels= c("pq_net","pq_c", "pq_n", "pq_pr"))
 
+
+#Plot PQ for SCENARIO 1
 p4<-ggplot(pq_lowgpp, aes(x=time, y=pq_x, color=factor(factor)))+
-  annotate("rect", xmin=data_lowgpp$time[20], xmax=data_lowgpp$time[111], ymin=-Inf, ymax=Inf, fill = "aliceblue", alpha=1)+
-  geom_line(aes(linetype=factor),size=1.5)+
+  geom_line(aes(linetype=factor),size=1)+
   theme_classic()+
   ylab(expression(paste(PQ[x])))+
   xlab("Time of Day")+
-  theme(axis.title.x=element_text(size=14,colour = "black"))+
-  theme(axis.title.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.x=element_text(size=14,colour = "black"))+
+  theme(axis.title.x=element_text(size=10,colour = "black"))+
+  theme(axis.title.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.x=element_text(size=8,colour = "black"))+
   scale_x_datetime(date_labels = "%H:%M", date_breaks = "4 hours", limits=c(as.POSIXct(data_lowgpp$time[20]), as.POSIXct(data_lowgpp$time[111])))+
-  scale_y_continuous(limits=c(-1.3,1.8), breaks=seq(from=-1.2, to=1.8, by=0.3))+
-  scale_color_manual(labels=labs, name = "PQ type",values = c("#000000","#D55E00","#0072B2","#009E73"))+
-  scale_linetype_manual(values=c("solid", "dashed","dashed","dashed"))+
+  scale_y_continuous(limits=c(-1.3,1.8), breaks=seq(from=-1.2, to=1.8, by=0.6))+
+  scale_color_manual(labels=labs, name = "PQ type",values = c("#000000","#D55E00","#0072B2","#009E73"),
+                     guide=guide_legend(override.aes=list(linetype=c(1,5,3,4))))+
+  scale_linetype_manual(values=c("solid", "dashed","dotted","dotdash"))+
   theme(legend.text=element_text(size=12),legend.position="none")
   
   
-##High GPP and low NO3
+#SCENARIO 2: High GPP and low NO3
 
 #PQ_C is the carbon portion that describes the type of organic molecule synthesized. 
-#For phytoplakton this value is believed to be 1.1. Although, lipid production will likely increase this value
-#during the photic period. 
-pq_c_start<-rep(1.1,times=length(dtime))
-pq_c<-pq_c_start+light*0.000055
+#For phytoplakton this value is believed to be 1.1. 
+pq_c<-1.1
 
 #PQ_N is the NO3 portion. NO3 is low so this is near zero
-pq_n<-light*0.00001
+pq_n<-0
 
-#PQ_pr is the photorespiration portion. Low GPP below 100% sat means no PR
+#PQ_pr is the photorespiration portion. GPP above 100% sat means PR is occurring. 
+# We scale the effect by light and a coefficient (0.00061) that represents the literature. In this case a PQ_pr that averages ~ -0.5
 pq_pr<- -light*0.00061
 
 #PQ_net is all combined
 pq_net<-pq_c+pq_n+pq_pr
 
+#Format for plotting
 pq_highgpp_lown<-melt(data.frame(as.POSIXct(dtime,format="%H:%M:%S"),pq_c, pq_n, pq_pr,pq_net ),id="as.POSIXct.dtime..format.....H..M..S..")
 names(pq_highgpp_lown)<-c("time","factor","pq_x" )
-
 pq_highgpp_lown$factor<-factor(pq_highgpp_lown$factor, levels= c("pq_net","pq_c", "pq_n", "pq_pr"))
 
 
-
+# Plot PQ for SCENARIO 2
 p5<-ggplot(pq_highgpp_lown, aes(x=time, y=pq_x, color=factor(factor)))+
-  annotate("rect", xmin=data_lowgpp$time[20], xmax=data_lowgpp$time[111], ymin=-Inf, ymax=Inf, fill = "aliceblue", alpha=1)+
-  geom_line(aes(linetype=factor),size=1.5)+
+  geom_line(aes(linetype=factor),size=1)+
   theme_classic()+
   ylab(expression(paste(PQ[x])))+
   xlab("Time of Day")+
-  theme(axis.title.x=element_text(size=14,colour = "black"))+
-  theme(axis.title.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.x=element_text(size=14,colour = "black"))+
+  theme(axis.title.x=element_text(size=10,colour = "black"))+
+  theme(axis.title.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.x=element_text(size=8,colour = "black"))+
   scale_x_datetime(date_labels = "%H:%M", date_breaks = "4 hours", limits=c(as.POSIXct(data_lowgpp$time[20]), as.POSIXct(data_lowgpp$time[111])))+
-  scale_y_continuous(limits=c(-1.3,1.8), breaks=seq(from=-1.2, to=1.8, by=0.3))+
-  scale_color_manual(labels=labs, name = "PQ type",values = c("#000000","#D55E00","#0072B2","#009E73"))+
-  scale_linetype_manual(values=c("solid", "dashed","dashed","dashed"))+
+  scale_y_continuous(limits=c(-1.3,1.8), breaks=seq(from=-1.2, to=1.8, by=0.6))+
+  scale_color_manual(labels=labs, name = "PQ type",values = c("#000000","#D55E00","#0072B2","#009E73"),
+                     guide=guide_legend(override.aes=list(linetype=c(1,5,3,4))))+
+  scale_linetype_manual(values=c("solid", "dashed","dotted","dotdash"))+
   theme(legend.position="none")+
   theme(axis.title.y=element_blank())
 
 
-##High GPP and low NO3
+#SCENARIO 3: High GPP and high NO3
 
 #PQ_C is the carbon portion that describes the type of organic molecule synthesized. 
-#For phytoplakton this value is believed to be 1.1. Although, lipid production will likely increase this value
-#during the photic period. 
-pq_c_start<-rep(1.1,times=length(dtime))
-pq_c<-pq_c_start+light*0.0001
+#For phytoplakton this value is believed to be 1.1. 
+pq_c<-1.1
 
-#PQ_N is the NO3 portion. NO3 is low so this is near zero
+#PQ_N is the NO3 portion. NO3 is high so we scale the effect by light and a coefficient (0.0008) that represents the literature. In this case a PQ_NO3 that averages ~ +0.6
 pq_n<- light*0.0008
 
-#PQ_pr is the photorespiration portion. Low GPP below 100% sat means no PR
+#PQ_pr is the photorespiration portion. # We scale the effect by light and a coefficient (0.00061) that represents the literature. In this case a PQ_pr that averages ~ -0.5
 pq_pr<- -light*0.00061
 
 #PQ_net is all combined
 pq_net<-pq_c+pq_n+pq_pr
 
+#Format for plot
 pq_highgpp_highn<-melt(data.frame(as.POSIXct(dtime,format="%H:%M:%S"),pq_c, pq_n, pq_pr,pq_net ),id="as.POSIXct.dtime..format.....H..M..S..")
 names(pq_highgpp_highn)<-c("time","factor","pq_x" )
-labs<-c(expression(phantom("--")*PQ['net']),
-        expression(PQ['c']*phantom("-")),
-        expression(PQ['N']*phantom("-")),
+labs<-c(expression(PQ['Bio']),
+        expression(PQ['C']),
+        expression(PQ[NO[3]]),
         expression(PQ['Pr']))
-
 pq_highgpp_highn$factor<-factor(pq_highgpp_highn$factor, levels= c("pq_net","pq_c", "pq_n", "pq_pr"))
 
 
+# Plot PQ for SCENARIO 3
 p6<-ggplot(pq_highgpp_highn, aes(x=time, y=pq_x, color=factor))+
-  annotate("rect", xmin=data_lowgpp$time[20], xmax=data_lowgpp$time[111], ymin=-Inf, ymax=Inf, fill = "aliceblue", alpha=1)+
-  geom_line(aes(linetype=factor),size=1.5)+
+  geom_line(aes(linetype=factor),size=1)+
   theme_classic()+
   ylab(expression(paste(PQ[x])))+
   xlab("Time of Day")+
-  theme(axis.title.x=element_text(size=14,colour = "black"))+
-  theme(axis.title.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.x=element_text(size=14,colour = "black"))+
+  theme(axis.title.x=element_text(size=10,colour = "black"))+
+  theme(axis.title.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.x=element_text(size=8,colour = "black"))+
   scale_x_datetime(date_labels = "%H:%M", date_breaks = "4 hours", limits=c(as.POSIXct(data_lowgpp$time[20]), as.POSIXct(data_lowgpp$time[111])))+
-  scale_y_continuous(limits=c(-1.3,1.8), breaks=seq(from=-1.2, to=1.8, by=0.3))+
+  scale_y_continuous(limits=c(-1.3,1.8), breaks=seq(from=-1.2, to=1.8, by=0.6))+
   #scale_color_discrete(labels=labs, name = "PQ type")+
-  scale_color_manual(labels=labs, name = "PQ type",values = c("#000000","#D55E00","#0072B2","#009E73"))+
-  scale_linetype_manual(values=c("solid", "dashed","dashed","dashed"))+
-  theme(legend.position="right",legend.text=element_text(size=12),legend.title=element_text(size=15))+
-  theme(axis.title.y=element_blank())+
-  guides(linetype = "none")   
+  scale_color_manual(labels=labs, name = "PQ type",values = c("#000000","#D55E00","#0072B2","#009E73"),
+                     guide=guide_legend(override.aes=list(linetype=c(1,5,3,4))))+
+  scale_linetype_manual(values=c("solid", "dashed","dotted","dotdash"))+
+  theme(legend.position="right",legend.text=element_text(size=9), legend.title=element_text(size=10), legend.text.align = 0)+
+  theme(axis.title.y=element_blank(),legend.key.width = unit(3.5,"line"))+
+  guides(linetype = "none")
+  
 
 
-##GPP estimates with different PQs
-pq_fw1<-1
-pq_fw2<-1.2
-pq_mar<-1.4
-pq_min<-0.5
-pq_max<-3.5
+# Calculate carbon-based GPP using simulated oxygen-based GPP --------------
 
-#low GPP and N
+
+# Common used and literature PQ values
+pq_fw1<-1 #Common value used in the freshwater sciences
+pq_fw2<-1.2 #Common value used in the freshwater sciences
+pq_mar<-1.4 #Common value used in the marine sciences
+pq_min<-0.5 #Lower measured value from the literature. This is a conservative value.
+pq_max<-3.5 #Higher measured value from the literature. This is a conservative value. 
+
+# SCENARIO 1: Low GPP and low NO3
+##Take the mean of PQ_net from Scenario 1
 pq_net<-mean(pq_lowgpp[pq_lowgpp$factor == "pq_net",]$pq_x )
 
-gpp_o2<-20
+##Calculate 
+gpp_o2<-19 ##Fixed low oxygen based GPP (in mmmol per meter-cubed per hour)
 gpp_c_fw1<-gpp_o2/pq_fw1
 gpp_c_fw2<-gpp_o2/pq_fw2
 gpp_c_mar<-gpp_o2/pq_mar
@@ -350,42 +374,36 @@ gpp_c_min<-gpp_o2/pq_min
 gpp_c_max<-gpp_o2/pq_max
 gpp_c_true<-gpp_o2/pq_net
 
-
+#Format
 values<-c(gpp_o2, gpp_c_fw1,gpp_c_fw2,gpp_c_mar, gpp_c_true )
-#values<-c(gpp_o2, gpp_c_fw1,gpp_c_fw2,gpp_c_mar,gpp_c_min, gpp_c_max, gpp_c_true )
-#var<-c("O2", "C", "C", "C", "C", "C", "C")
 var<-c(1,1.5,1.5,1.5,1.5)
-#factor<-c("", "fw1", "fw2", "mar","min", "max", "true")
 factor<-c("", "fw1", "fw2", "mar", "true")
 data<-data.frame(values, var, factor)
-#data$var<-factor(data$var, levels= c("O2", "C"))
-#data$factor<-factor(data$factor, levels= c("true","min", "fw1", "fw2", "mar", "max", ""))
 data$factor<-factor(data$factor, levels= c("true","min", "fw1", "fw2","mar", ""))
 
+# Plot O and C-based metabolism with different PQ values for scenario 1
 p7<-ggplot(data, aes(x=var, y=values, group=factor(factor)))+
-  geom_jitter(aes(shape=factor(factor)),size=4, width=0.05)+
+  geom_jitter(aes(shape=factor(factor)),size=2, width=0.05)+
   theme_classic()+
-  ylab(expression(paste("GPP (mmol ", O[2]," or C ", m^-3," ",hr^-1 ,")")))+
+  ylab(expression(atop("GPP", paste("(mmol ", O[2]," or C ", m^-3," ",hr^-1,")"))))+
   xlab("Metabolism Units")+
-  theme(axis.title.x=element_text(size=14,colour = "black"))+
-  theme(axis.title.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.x=element_text(size=14,colour = "black"))+
-  scale_y_continuous(limits=c(0,45), breaks=seq(from=0, to=45, by=5))+
+  theme(axis.title.x=element_text(size=10,colour = "black"))+
+  theme(axis.title.y=element_text(size=10,colour = "black",hjust = 0.5))+
+  theme(axis.text.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.x=element_text(size=10,colour = "black"))+
+  scale_y_continuous(limits=c(0,43), breaks=seq(from=0, to=40, by=10))+
   scale_x_continuous(limits=c(0.8, 1.7), breaks=c(1, 1.5), labels=c(expression(paste(, O[2],)), "C"))+
-  #scale_x_discrete(labels=c(expression(paste(, O[2],)), "C"))+
-  #scale_shape_manual(values=c(13, 0,15, 16, 17, 2,19),labels=labs, name = "PQ value")+
   scale_shape_manual(values=c(13,15, 16, 17,19),labels=labs, name = "PQ value")+ 
   theme(legend.position="none")+
   theme(axis.title.x=element_blank())+
   annotate("rect", xmin=1.4, xmax=1.6, ymin=gpp_c_min, ymax=gpp_c_max, fill = "black", alpha=.2)
 
 
-#high GPP and low N
+# SCENARIO 2: High GPP and low NO3
 pq_net<-mean(pq_highgpp_lown[pq_highgpp_lown$factor == "pq_net",]$pq_x )
 
 
-gpp_o2<-250
+gpp_o2<-250 ##Fixed high oxygen based GPP (in mmmol per meter-cubed per hour)
 gpp_c_fw1<-gpp_o2/pq_fw1
 gpp_c_fw2<-gpp_o2/pq_fw2
 gpp_c_mar<-gpp_o2/pq_mar
@@ -393,40 +411,35 @@ gpp_c_min<-gpp_o2/pq_min
 gpp_c_max<-gpp_o2/pq_max
 gpp_c_true<-gpp_o2/pq_net
 
+# format
 values<-c(gpp_o2, gpp_c_fw1,gpp_c_fw2,gpp_c_mar, gpp_c_true )
-#values<-c(gpp_o2, gpp_c_fw1,gpp_c_fw2,gpp_c_mar,gpp_c_min, gpp_c_max, gpp_c_true )
-#var<-c("O2", "C", "C", "C", "C", "C", "C")
 var<-c(1,1.5,1.5,1.5,1.5)
 factor<-c("", "fw1", "fw2", "mar", "true")
-#factor<-c("", "fw1", "fw2", "mar","min", "max", "true")
 data<-data.frame(values, var, factor)
-#data$var<-factor(data$var, levels= c("O2", "C"))
-#data$factor<-factor(data$factor, levels= c("true","min", "fw1", "fw2", "mar", "max", ""))
 data$factor<-factor(data$factor, levels= c("true","min", "fw1", "fw2","mar", ""))
 
+# Plot O and C-based metabolism with different PQ values for scenario 2
 p8<-ggplot(data, aes(x=var, y=values, group=factor(factor)))+
-  geom_jitter(aes(shape=factor(factor)),size=4, width=0.05)+
+  geom_jitter(aes(shape=factor(factor)),size=2, width=0.05)+
   theme_classic()+
   ylab(expression(paste("GPP (mmol ", O[2]," ", m^-3," ",hr^-1 ,")")))+
   xlab("Metabolism Units")+
-  theme(axis.title.x=element_text(size=14,colour = "black"))+
-  theme(axis.title.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.x=element_text(size=14,colour = "black"))+
-  scale_y_continuous(limits=c(70,520), breaks=seq(from=70, to=520, by=50))+
+  theme(axis.title.x=element_text(size=10,colour = "black"))+
+  theme(axis.title.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.x=element_text(size=10,colour = "black"))+
+  scale_y_continuous(limits=c(50,500), breaks=seq(from=75, to=475, by=100))+
   scale_x_continuous(limits=c(0.8, 1.7), breaks=c(1, 1.5), labels=c(expression(paste(, O[2],)), "C"))+
-  #scale_x_discrete(labels=c(expression(paste(, O[2],)), "C"))+
-  #scale_shape_manual(values=c(13, 0,15, 16, 17, 2,19),labels=labs, name = "PQ value")+  theme(legend.position="none")+
   scale_shape_manual(values=c(13,15, 16, 17,19),labels=labs, name = "PQ value")+ 
   theme(axis.title.y=element_blank())+
   theme(legend.position="none")+
   annotate("rect", xmin=1.4, xmax=1.6, ymin=gpp_c_min, ymax=gpp_c_max, fill = "black", alpha=.2)
 
 
-#high GPP and low N
+# SCENARIO 2: High GPP and high NO3
 pq_net<-mean(pq_highgpp_highn[pq_highgpp_highn$factor == "pq_net",]$pq_x )
 
-gpp_o2<-250
+gpp_o2<-250 ##Fixed high oxygen based GPP (in mmmol per meter-cubed per hour)
 gpp_c_fw1<-gpp_o2/pq_fw1
 gpp_c_fw2<-gpp_o2/pq_fw2
 gpp_c_mar<-gpp_o2/pq_mar
@@ -436,39 +449,49 @@ gpp_c_true<-gpp_o2/pq_net
 
 
 values<-c(gpp_o2, gpp_c_fw1,gpp_c_fw2,gpp_c_mar, gpp_c_true )
-#var<-c("O2", "C", "C", "C", "C", "C", "C")
 var<-c(1,1.5,1.5,1.5,1.5)
 factor<-c("", "fw1", "fw2", "mar", "true")
 data<-data.frame(values, var, factor)
-#data$var<-factor(data$var, levels= c("O2", "C"))
 data$factor<-factor(data$factor, levels= c("true","min", "fw1", "fw2","mar", ""))
+labs<-c(expression(Average~PQ['Bio']),
+        "PQ=1 (FW)",
+        "PQ=1.2 (FW)",
+        "PQ=1.4 (Marine)",
+        "NA (true value)")
 
-labs<-c("Net PQ"," PQ=1 (FW)", "PQ=1.2 (FW)", "PQ=1.4 (Marine)","")
 
-
+# Plot O and C-based metabolism with different PQ values for scenario 3
 p9<-ggplot(data, aes(x=var, y=values))+
-  geom_rect(aes(xmin=1.4, xmax=1.6, ymin=gpp_c_min, ymax=gpp_c_max, fill="GPP of Literature \nPQ Range"), color=NA, alpha=0.2)+
-  geom_jitter(aes(shape=factor(factor)),size=4, width=0.05)+
+  geom_rect(aes(xmin=1.4, xmax=1.6, ymin=gpp_c_min, ymax=gpp_c_max, fill="Range of GPP\nderived from literature\nPQ range"), color=NA, alpha=0.2)+
+  geom_jitter(aes(shape=factor(factor)),size=2, width=0.05)+
   theme_classic()+
   ylab(expression(paste("GPP (mmol ", O[2]," ", m^-3," ",hr^-1 ,")")))+
   xlab("Metabolism Units")+
-  theme(axis.title.x=element_text(size=14,colour = "black"))+
-  theme(axis.title.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.y=element_text(size=14,colour = "black"))+
-  theme(axis.text.x=element_text(size=14,colour = "black"))+
-  scale_y_continuous(limits=c(70,520), breaks=seq(from=70, to=520, by=50))+
+  theme(axis.title.x=element_text(size=10,colour = "black"))+
+  theme(axis.title.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.y=element_text(size=10,colour = "black"))+
+  theme(axis.text.x=element_text(size=10,colour = "black"))+
+  scale_y_continuous(limits=c(50,500), breaks=seq(from=75, to=475, by=100))+
   scale_x_continuous(limits=c(0.8, 1.7), breaks=c(1, 1.5), labels=c(expression(paste(, O[2],)), "C"))+
-  #scale_x_discrete(labels=c(expression(paste(, O[2],)), "C"))+
-  scale_shape_manual(values=c(13,15, 16, 17,19),labels=labs, name = "PQ value")+  
-  theme(legend.position="right",legend.text=element_text(size=12), legend.title=element_text(size=15))+
+  scale_shape_manual(values=c(13,15, 16, 17, 19), 
+                     breaks= c("true", "fw1", "fw2", "mar", ""), 
+                     labels=labs,
+                     name = "PQ value")+  
+  theme(legend.position="right",legend.text=element_text(size=9), legend.title=element_text(size=10), legend.text.align = 0)+
   theme(axis.title.y=element_blank(),axis.title.x=element_blank())+
-   scale_fill_manual('',
+  scale_fill_manual('',
                     values = 'gray',  
                     guide = guide_legend(override.aes = list(alpha = 1)))+
-  theme(legend.spacing.y=unit(-0.03, "cm"))
+  theme(legend.spacing.y=unit(-0.02, "cm"))+
+  guides(rect = guide_legend(order=2),
+         shape = guide_legend(order=1))
 
+pdf(file="~/GitHub/metabolism-PQ/diel.pdf",
+    width=8, height=5)   
 
+#Patch plots together and add labels
+patchwork<-p1/p4/p7 | p2/p5/p8 | p3/p6/p9
 
-
-p1/p4/p7 | p2/p5/p8 | p3/p6/p9
-
+patchwork + plot_annotation(tag_levels = list(c('A)', 'D)','G)','B)','E)','H)','C)','F)','I)')))
+dev.off()
+                  
